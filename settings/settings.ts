@@ -1,9 +1,100 @@
 import AutoNoteMover from "main";
-import { App, PluginSettingTab, Setting, ButtonComponent } from "obsidian";
+import {
+  App,
+  PluginSettingTab,
+  Setting,
+  ButtonComponent,
+  Modal,
+} from "obsidian";
 
 import { FolderSuggest } from "suggests/file-suggest";
 import { TagSuggest } from "suggests/tag-suggest";
 import { arrayMove } from "utils/Utils";
+
+// Excluded Folders Modal
+class ExcludedFoldersModal extends Modal {
+  private plugin: AutoNoteMover;
+  private onSave: () => void;
+
+  constructor(app: App, plugin: AutoNoteMover, onSave?: () => void) {
+    super(app);
+    this.plugin = plugin;
+    this.onSave = onSave;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+
+    contentEl.createEl("h2", { text: "Manage Excluded Folders" });
+
+    const desc = contentEl.createEl("p", {
+      cls: "setting-item-description",
+    });
+    desc.append(
+      "Notes in these folders will not be moved. ",
+      desc.createEl("strong", { text: "This takes precedence over all rules." })
+    );
+
+    const listContainer = contentEl.createDiv({
+      cls: "anm-excluded-folders-list",
+    });
+
+    const renderList = () => {
+      listContainer.empty();
+      this.plugin.settings.excluded_folder.forEach((folder, index) => {
+        const row = listContainer.createDiv({
+          cls: "anm-excluded-folder-row",
+        });
+
+        const searchSetting = new Setting(row).addSearch((cb) => {
+          new FolderSuggest(this.app, cb.inputEl);
+          cb.setPlaceholder("Folder")
+            .setValue(folder.folder)
+            .onChange(async (newFolder) => {
+              this.plugin.settings.excluded_folder[index].folder = newFolder;
+              await this.plugin.saveSettings();
+            });
+        });
+        searchSetting.infoEl.remove();
+        searchSetting.settingEl.addClass("anm-flex-grow");
+
+        new ButtonComponent(row)
+          .setIcon("cross")
+          .setTooltip("Remove")
+          .onClick(async () => {
+            this.plugin.settings.excluded_folder.splice(index, 1);
+            await this.plugin.saveSettings();
+            renderList();
+          });
+      });
+    };
+
+    renderList();
+
+    const buttonContainer = contentEl.createDiv({
+      cls: "anm-modal-buttons",
+    });
+
+    new ButtonComponent(buttonContainer)
+      .setButtonText("Add folder")
+      .setIcon("plus")
+      .onClick(async () => {
+        this.plugin.settings.excluded_folder.push({ folder: "" });
+        await this.plugin.saveSettings();
+        renderList();
+      });
+
+    new ButtonComponent(buttonContainer)
+      .setButtonText("Save & Close")
+      .setCta()
+      .onClick(async () => {
+        await this.plugin.saveSettings();
+        this.onSave?.();
+        this.close();
+      });
+  }
+}
 
 export type MatchMode = "ALL" | "ANY";
 
@@ -570,69 +661,60 @@ export class AutoNoteMoverSettingTab extends PluginSettingTab {
 
     const excludedFolderDesc = document.createDocumentFragment();
     excludedFolderDesc.append(
-      "Notes in the excluded folder will not be moved.",
-      descEl.createEl("br"),
-      "This takes precedence over the notes movement rules.",
+      "Notes in these folders will not be moved. ",
+      descEl.createEl("strong", { text: "This takes precedence over all rules." })
     );
-    new Setting(this.containerEl)
 
-      .setName("Add excluded folder")
+    const excludedSetting = new Setting(this.containerEl)
+      .setName("Excluded folders")
       .setDesc(excludedFolderDesc)
       .addButton((button: ButtonComponent) => {
         button
-          .setTooltip("Add excluded folders")
-          .setButtonText("+")
-          .setCta()
-          .onClick(async () => {
-            this.plugin.settings.excluded_folder.push({
-              folder: "",
-            });
-            await this.plugin.saveSettings();
-            this.display();
+          .setButtonText("Manage")
+          .onClick(() => {
+            new ExcludedFoldersModal(this.app, this.plugin, () => {
+              renderExcludedFolders();
+            }).open();
           });
       });
 
-    this.plugin.settings.excluded_folder.forEach((excluded_folder, index) => {
-      const s = new Setting(this.containerEl)
-        .addSearch((cb) => {
-          new FolderSuggest(this.app, cb.inputEl);
-          cb.setPlaceholder("Folder")
-            .setValue(excluded_folder.folder)
-            .onChange(async (newFolder) => {
-              this.plugin.settings.excluded_folder[index].folder = newFolder;
-              await this.plugin.saveSettings();
-            });
-        })
-
-        .addExtraButton((cb) => {
-          cb.setIcon("up-chevron-glyph")
-            .setTooltip("Move up")
-            .onClick(async () => {
-              arrayMove(this.plugin.settings.excluded_folder, index, index - 1);
-              await this.plugin.saveSettings();
-              this.display();
-            });
-        })
-        .addExtraButton((cb) => {
-          cb.setIcon("down-chevron-glyph")
-            .setTooltip("Move down")
-            .onClick(async () => {
-              arrayMove(this.plugin.settings.excluded_folder, index, index + 1);
-              await this.plugin.saveSettings();
-              this.display();
-            });
-        })
-        .addExtraButton((cb) => {
-          cb.setIcon("cross")
-            .setTooltip("Delete")
-            .onClick(async () => {
-              this.plugin.settings.excluded_folder.splice(index, 1);
-              await this.plugin.saveSettings();
-              this.display();
-            });
-        });
-      s.infoEl.remove();
+    const excludedListContainer = excludedSetting.infoEl.createDiv({
+      cls: "anm-excluded-folders-inline",
     });
+
+    const renderExcludedFolders = () => {
+      excludedListContainer.empty();
+      const folders = this.plugin.settings.excluded_folder
+        .filter((f) => f.folder)
+        .map((f) => f.folder);
+
+      if (folders.length > 0) {
+        const tagsContainer = excludedListContainer.createDiv({
+          cls: "anm-tags-container",
+        });
+
+        folders.forEach((folder) => {
+          const tag = tagsContainer.createEl("span", {
+            cls: "anm-folder-tag",
+          });
+          tag.appendText(folder);
+        });
+
+        const countInfo = excludedListContainer.createEl("span", {
+          cls: "anm-excluded-count",
+        });
+        countInfo.appendText(
+          `${folders.length} folder${folders.length > 1 ? "s" : ""} excluded`
+        );
+      } else {
+        const emptyMsg = excludedListContainer.createEl("span", {
+          cls: "anm-empty-message",
+        });
+        emptyMsg.appendText("No folders excluded");
+      }
+    };
+
+    renderExcludedFolders();
 
     const statusBarTriggerIndicatorDesc = document.createDocumentFragment();
     statusBarTriggerIndicatorDesc.append(

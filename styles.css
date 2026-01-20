@@ -140,3 +140,67 @@
 .anm-visible {
     display: flex;
 }
+
+/* Modal Styles */
+.anm-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.anm-excluded-folders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.anm-excluded-folder-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.anm-excluded-folder-row .setting-item {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.anm-excluded-folder-row .setting-item-control {
+    padding: 0;
+}
+
+/* Excluded Folders Inline List */
+.anm-excluded-folders-inline {
+    margin-top: 8px;
+}
+
+.anm-tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.anm-folder-tag {
+    background-color: var(--background-modifier-border);
+    color: var(--text-normal);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.anm-excluded-count {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.anm-empty-message {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-style: italic;
+}
