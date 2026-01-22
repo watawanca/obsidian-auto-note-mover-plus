@@ -2,6 +2,7 @@
  * Update manifest.json version from package.json
  * Run automatically after npm version
  */
+/* eslint-disable no-undef */
 
 import { readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
