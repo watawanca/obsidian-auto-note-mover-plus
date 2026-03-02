@@ -1,9 +1,8 @@
-import { MarkdownView, Plugin, TFile, getAllTags, Notice, TAbstractFile, normalizePath } from 'obsidian';
+import {MarkdownView, Plugin, TFile, TFolder, TAbstractFile, getAllTags, Notice, normalizePath} from 'obsidian';
 import { DEFAULT_SETTINGS, AutoNoteMoverSettings, AutoNoteMoverSettingTab, FolderTagRule, RuleCondition } from 'settings/settings';
 import { fileMove, getTriggerIndicator, isFmDisable } from 'utils/Utils';
 import { isRuleMatched } from 'utils/ruleMatching';
 import { processFolderPath } from 'utils/pathProcessing';
-import { TFile, TFolder, TAbstractFile, normalizePath } from 'obsidian';
 
 export default class AutoNoteMover extends Plugin {
 	settings: AutoNoteMoverSettings;
