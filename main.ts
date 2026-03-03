@@ -1,4 +1,4 @@
-import { MarkdownView, Plugin, TFile, getAllTags, Notice, TAbstractFile, normalizePath } from 'obsidian';
+import {MarkdownView, Plugin, TFile, TFolder, TAbstractFile, getAllTags, Notice, normalizePath} from 'obsidian';
 import { DEFAULT_SETTINGS, AutoNoteMoverSettings, AutoNoteMoverSettingTab, FolderTagRule, RuleCondition } from 'settings/settings';
 import { fileMove, getTriggerIndicator, isFmDisable } from 'utils/Utils';
 import { isRuleMatched } from 'utils/ruleMatching';
@@ -15,58 +15,51 @@ export default class AutoNoteMover extends Plugin {
 	async initialize(): Promise<void> {
 		await this.loadSettings();
 
-		const fileCheck = async (file: TAbstractFile, oldPath?: string, caller?: string): Promise<boolean> => {
+		const fileCheck = async (
+			file: TAbstractFile,
+			oldPath?: string,
+			caller?: string
+		): Promise<boolean> => {
 			const folderTagPattern = this.settings.folder_tag_pattern;
 			const excludedFolder = this.settings.excluded_folder;
+
 			if (this.settings.trigger_auto_manual !== 'Automatic' && caller !== 'cmd') {
 				return false;
 			}
 			if (!(file instanceof TFile)) return false;
 
-			// The rename event with no basename change will be terminated.
+			// Prevent rename loop when basename unchanged
 			if (oldPath && oldPath.split('/').pop() === file.basename + '.' + file.extension) {
 				return false;
 			}
 
-			// Excluded Folder check
-			const excludedFolderLength = excludedFolder.length;
-			for (let i = 0; i < excludedFolderLength; i++) {
-				if (
-					!this.settings.use_regex_to_check_for_excluded_folder &&
-					excludedFolder[i].folder &&
-					file.parent.path === normalizePath(excludedFolder[i].folder)
-				) {
-					return false;
-				} else if (this.settings.use_regex_to_check_for_excluded_folder && excludedFolder[i].folder) {
+			// Excluded folder check
+			for (const excluded of excludedFolder) {
+				if (!excluded.folder) continue;
+
+				if (!this.settings.use_regex_to_check_for_excluded_folder) {
+					if (file.parent.path === normalizePath(excluded.folder)) {
+						return false;
+					}
+				} else {
 					try {
-						const regex = new RegExp(excludedFolder[i].folder);
-						if (regex.test(file.parent.path)) {
-							return false;
-						}
+						const regex = new RegExp(excluded.folder);
+						if (regex.test(file.parent.path)) return false;
 					} catch {
-						if (file.parent.path.includes(excludedFolder[i].folder)) {
-							return false;
-						}
+						if (file.parent.path.includes(excluded.folder)) return false;
 					}
 				}
 			}
 
 			const fileCache = this.app.metadataCache.getFileCache(file);
-			// Metadata can be undefined just after creation; wait for cache to resolve.
 			if (!fileCache) return false;
-			// Disable AutoNoteMover when "AutoNoteMover: disable" is present in the frontmatter.
-			if (isFmDisable(fileCache)) {
-				return false;
-			}
+			if (isFmDisable(fileCache)) return false;
 
 			const fileName = file.basename;
 			const fileFullName = file.basename + '.' + file.extension;
-			const settingsLength = folderTagPattern.length;
 			const cacheTag = getAllTags(fileCache) || [];
 
-			for (let i = 0; i < settingsLength; i++) {
-				const rule = folderTagPattern[i];
-
+			for (const rule of folderTagPattern) {
 				const result = isRuleMatched(rule, {
 					fileCache,
 					fileName,
@@ -75,20 +68,60 @@ export default class AutoNoteMover extends Plugin {
 					file,
 				});
 
-				if (result.matched) {
-					const processedFolder = processFolderPath(
-						rule.folder,
-						fileCache,
-						file,
-						rule,
-						result.captureGroups
-					);
-					const originalPath = file.path;
-					await fileMove(this.app, processedFolder, fileFullName, file, this.settings.hide_notifications, this.settings.duplicate_file_action, caller);
-					// file.path updates after successful move
-					return file.path !== originalPath;
+				if (!result.matched) continue;
+
+				const processedFolder = processFolderPath(
+					rule.folder,
+					fileCache,
+					file,
+					rule,
+					result.captureGroups
+				);
+
+				let finalFolder = processedFolder;
+
+				// ---- Topic-based subfolder selection ----
+				const topicRaw = fileCache?.frontmatter?.Topic;
+				const topicNum = Number(topicRaw);
+
+				if (!isNaN(topicNum) && topicNum > 0) {
+					const topicPrefix = String(topicNum).padStart(2, '0');
+
+					const baseFolder = this.app.vault.getAbstractFileByPath(processedFolder);
+
+					if (baseFolder instanceof TFolder) {
+						const matchedSubfolder = baseFolder.children.find(
+							(child) =>
+								child instanceof TFolder &&
+								child.name.startsWith(`Topic ${topicPrefix} -`)
+						);
+
+						if (matchedSubfolder instanceof TFolder) {
+							finalFolder = matchedSubfolder.path;
+						}
+					}
 				}
+
+				// Prevent unnecessary folder-only move loop
+				if (file.parent.path === finalFolder) {
+					return false;
+				}
+
+				const originalPath = file.path;
+
+				await fileMove(
+					this.app,
+					finalFolder,
+					fileFullName,
+					file,
+					this.settings.hide_notifications,
+					this.settings.duplicate_file_action,
+					caller
+				);
+
+				return file.path !== originalPath;
 			}
+
 			return false;
 		};
 
