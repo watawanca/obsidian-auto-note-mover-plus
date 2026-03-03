@@ -81,7 +81,7 @@ export default class AutoNoteMover extends Plugin {
 				let finalFolder = processedFolder;
 
 				// ---- Topic-based subfolder selection ----
-				const topicRaw = fileCache?.frontmatter?.topic;
+				const topicRaw = fileCache?.frontmatter?.Topic;
 				const topicNum = Number(topicRaw);
 
 				if (!isNaN(topicNum) && topicNum > 0) {
